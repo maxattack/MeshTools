@@ -117,7 +117,7 @@ public static class MeshExtensions
 		var ci = new CombineInstance[filters.Length];
 		for(int i=0; i<ci.Length; ++i) {
 			ci[i].mesh = filters[i].sharedMesh;
-			ci[i].transform = filters[i].GetComponent<Transform>().localToWorldMatrix * worldToRoot;
+			ci[i].transform = worldToRoot * filters[i].GetComponent<Transform>().localToWorldMatrix;
 			filters[i].gameObject.SetActive(false);
 		}
 		

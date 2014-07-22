@@ -1,4 +1,8 @@
-﻿using System.Collections;
+﻿using CSG;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -33,15 +37,8 @@ public static class MeshTools {
 				
 		});
 		
-		//		new GameObject("Test", typeof(MeshFilter), typeof(MeshRenderer))
-		//			.GetComponent<MeshFilter>().sharedMesh = result;
-		
-		//		var path = EditorUtility.SaveFilePanel("Mesh Path", "Assets", "testModel", "asset");
-		var path = "Assets/mesh.asset";
-		if (path.Length > 0) {
-			Debug.Log("Saving " + result + " to path: " + path);
-			AssetDatabase.CreateAsset(result, path);
-		} 
+		new GameObject("Test", typeof(MeshFilter), typeof(MeshRenderer))
+			.GetComponent<MeshFilter>().sharedMesh = result;
 		
 	}
 	
@@ -54,9 +51,45 @@ public static class MeshTools {
 		if (path.Length > 0) {
 			var idx = path.IndexOf("Assets");
 			if (idx >= 0) {
-				AssetDatabase.CreateAsset(mesh, path.Substring(idx));
+				try {
+					AssetDatabase.CreateAsset(mesh, path.Substring(idx));
+				} catch(UnityException) {
+					AssetDatabase.CreateAsset(Mesh.Instantiate(mesh) as Mesh, path.Substring(idx));
+				}
 			}
 		}
+	}
+
+	[MenuItem("MeshTools/Test CSG")]
+	static void TestCSG() {
+		var solids = Selection.gameObjects
+			.Select(go => go.GetComponent<MeshFilter>())
+			.Where(filter => filter != null)
+			.Select(filter => filter.CreateSolid())
+			.ToArray();
+		
+		if (solids.Length == 1) {
+			solids[0].CreateGameObject("Dup");
+		} else if (solids.Length == 2) {
+			
+			var intersection = solids[0].Intersect(solids[1]);
+			intersection.CreateGameObject("Intersection");
+			
+			
+		} else if (solids.Length > 2) {
+			
+			var accum = solids[0];
+			for(int i=1; i<solids.Length; ++i) {
+				accum = accum.Union(solids[i]);
+			}
+			accum.CreateGameObject("Union");
+			
+		}
+
+		foreach(var go in Selection.gameObjects) {
+			go.SetActive(false);
+		}
+		
 	}
 
 }
