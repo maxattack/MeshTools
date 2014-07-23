@@ -70,29 +70,29 @@ namespace CSG {
 	public class Polygon
 	{
 		public Vertex[] vertices;
-		public Plane plane;
 		public object shared = null;
+		Polygon flipped = null;
 		
 		public Polygon(params Vertex[] args)
 		{
 			vertices = args;
-			plane = new Plane(vertices[0].pos, vertices[1].pos, vertices[2].pos);
 		}
 		
-		public Polygon Clone()
-		{
-			var verts = new Vertex[vertices.Length];
-			Array.Copy(vertices, verts, vertices.Length);
-			return new Polygon(verts) { shared = shared };
+		public Plane Plane {
+			get { return new Plane(vertices[0].pos, vertices[1].pos, vertices[2].pos); }
 		}
 		
-		public void Flip()
+		public Polygon Flipped()
 		{
-			Array.Reverse(vertices);
-			plane = plane.Flipped();
-			for(int i=0; i<vertices.Length; ++i) {
-				vertices[i] = vertices[i].Flipped;
+			if (flipped == null) {
+				var verts = new Vertex[vertices.Length];
+				for(int i=0; i<verts.Length; ++i) {
+					verts[i] = vertices[vertices.Length-1-i].Flipped;
+				}
+				flipped = new Polygon(verts) { shared = shared };
+				flipped.flipped = this;
 			}
+			return flipped;
 		}
 	}
 	
@@ -141,7 +141,7 @@ namespace CSG {
 				}
 			}
 			
-			go.GetComponent<MeshFilter>().sharedMesh = new Mesh() {
+			var mesh = new Mesh() {
 				name = name,
 				vertices = vbuf.ToArray(),
 				normals = nbuf.ToArray(),
@@ -149,24 +149,12 @@ namespace CSG {
 				colors32 = cbuf.ToArray(),
 				triangles = ibuf.ToArray()
 			};
+			
+			mesh.DedupVertices();
+			mesh.Optimize();
+			go.GetComponent<MeshFilter>().sharedMesh = mesh;
 			return go;
 		}
-		
-		Polygon[] ClonePolygons()
-		{
-			
-			var result = new Polygon[polygons.Length];
-			for(int i=0; i<polygons.Length; ++i) {
-				result[i] = polygons[i].Clone();
-			}
-			return result;
-		}
-		
-		public Solid Clone()
-		{
-			return new Solid(ClonePolygons());
-		}
-		
 		
 		// Return a new CSG solid representing space in either this solid or in the solid csg. 
 		// Neither this solid nor the solid csg are modified.
@@ -186,8 +174,8 @@ namespace CSG {
 		{
 			var a = new Node();
 			var b = new Node();
-			a.Build(ClonePolygons());
-			b.Build(csg.ClonePolygons());
+			a.Build(polygons);
+			b.Build(csg.polygons);
 			a.ClipTo(b);
 			b.ClipTo(a);
 			b.Invert();
@@ -215,8 +203,8 @@ namespace CSG {
 		{
 			var a = new Node();
 			var b = new Node();
-			a.Build(ClonePolygons());
-			b.Build(csg.ClonePolygons());
+			a.Build(polygons);
+			b.Build(csg.polygons);
 			a.Invert();
 			a.ClipTo(b);
 			b.ClipTo(a);
@@ -246,8 +234,8 @@ namespace CSG {
 		{
 			var a = new Node();
 			var b = new Node();
-			a.Build(ClonePolygons());
-			b.Build(csg.ClonePolygons());
+			a.Build(polygons);
+			b.Build(csg.polygons);
 			a.Invert();
 			b.ClipTo(a);
 			b.Invert();
@@ -263,11 +251,11 @@ namespace CSG {
 		
 		public Solid Inverse()
 		{
-			var result = Clone();
-			foreach(var polygon in result.polygons) {
-				polygon.Flip();
-			}			
-			return result;
+			var result = new Polygon[polygons.Length];
+			for(int i=0; i<polygons.Length; ++i) {
+				result[i] = polygons[i].Flipped();
+			}
+			return new Solid(result);
 		}
 		
 
@@ -284,27 +272,14 @@ namespace CSG {
 		internal Plane? plane = null;
 		internal List<Polygon> polygons = new List<Polygon>();
 		internal Node front = null, back = null;
-	
-		public Node Clone()
-		{
-			var result = new Node() {
-				plane = this.plane,
-				front = this.front == null ? null : this.front.Clone(),
-				back = this.back == null ? null : this.back.Clone(),
-			};
-			foreach(var polygon in polygons) {
-				result.polygons.Add(polygon.Clone());
-			}
-			return result;
-		}
 		
 		// Convert solid space to empty space and empty space to solid space.
 		
 		public void Invert()
 		{
 			// flip individual attributes
-			foreach(var polygon in polygons) {
-				polygon.Flip();
+			for(int i=0; i<polygons.Count; ++i) {
+				polygons[i] = polygons[i].Flipped();
 			}
 			if (plane != null) { plane = plane.Value.Flipped(); }
 			if (front != null) { front.Invert(); }
@@ -360,7 +335,7 @@ namespace CSG {
 		{
 			if (aPolygons.Count == 0) { return; }
 			if (plane == null) { 
-				plane = aPolygons[0].plane; 
+				plane = aPolygons[0].Plane; 
 			}
 			var front = new List<Polygon>();
 			var back = new List<Polygon>();
@@ -381,18 +356,12 @@ namespace CSG {
 	
 	public static class ExtensionMethods
 	{
-		
 		internal static Plane Flipped(this Plane plane) 
 		{ 
 			var result = new Plane();
 			result.normal = -plane.normal;
 			result.distance = -plane.distance;
 			return result;
-		}
-		
-		internal static float Dot(this Vector3 v, Vector3 u)
-		{
-			return Vector3.Dot(v, u);
 		}
 		
 		const int COPLANAR = 0;
@@ -418,7 +387,7 @@ namespace CSG {
 			
 			switch(polygonType) {
 			case COPLANAR:
-				if (plane.normal.Dot(polygon.plane.normal) > 0f) {
+				if (Vector3.Dot(plane.normal, polygon.Plane.normal) > 0f) {
 					coplanarFront.Add(polygon);
 				} else {
 					coplanarBack.Add(polygon);
@@ -442,9 +411,8 @@ namespace CSG {
 					if (ti != BACK) { frontBuf.Add(vi); }
 					if (ti != FRONT) { backBuf.Add(vi); }
 					if ((ti | tj) == SPANNING) {
-						var t = 
-							(-plane.distance - plane.normal.Dot(vi.pos)) / 
-							plane.normal.Dot(vj.pos - vi.pos);
+						var t = (-plane.distance - Vector3.Dot(plane.normal, vi.pos)) / 
+						        Vector3.Dot(plane.normal, vj.pos - vi.pos);
 						var v = vi.Interpolate(vj, t);
 						frontBuf.Add(v);
 						backBuf.Add(v);
@@ -489,9 +457,6 @@ namespace CSG {
 			
 			return new Solid(polygons);
 		}
-		
-		
-		
 	}	
 
 }

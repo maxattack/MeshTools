@@ -69,7 +69,17 @@ public static class MeshTools {
 			.ToArray();
 		
 		if (solids.Length == 1) {
-			solids[0].CreateGameObject("Dup");
+			
+			var subs = GameObject.FindObjectsOfType<MeshFilter>()
+				.Where(filter => !Selection.gameObjects.Contains(filter.gameObject))
+				.Select(filter => filter.CreateSolid())
+				.ToArray();
+			
+			if (subs.Length == 1) {
+				solids[0].Subtract(subs[0]).CreateGameObject("Difference");
+			}
+				
+			
 		} else if (solids.Length == 2) {
 			
 			var intersection = solids[0].Intersect(solids[1]);

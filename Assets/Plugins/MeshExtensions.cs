@@ -252,5 +252,61 @@ public static class MeshExtensions
 		return unusedVertices.Count;
 		
 	}
+	
+	static bool Approx(Vector2 u, Vector2 v) 
+	{
+		return Mathf.Approximately(u.x, v.x) && 
+		       Mathf.Approximately(u.y, v.y);
+	}
+	
+	static bool Approx(Vector3 u, Vector3 v) 
+	{
+		return Mathf.Approximately(u.x, v.x) && 
+		       Mathf.Approximately(u.y, v.y) && 
+		       Mathf.Approximately(u.z, v.z);
+	}
+	
+	static int ARGB(this Color32 c) { return (c.a << 24) + (c.r << 16) + (c.g << 8) + c.b; }
+	
+	public static int DedupVertices(this Mesh mesh)
+	{
+		var vbuf = mesh.vertices;
+		var cbuf = mesh.colors32;
+		var nbuf = mesh.normals;
+		var tbuf = mesh.uv;
+		var ibuf = mesh.triangles;
+		
+		var oldToNew = new int[vbuf.Length];
+		
+		int dedupCount = 0;
+		
+		for(int i=0; i<vbuf.Length; ++i) {
+			oldToNew[i] = i;
+			// check to see if we match any vertices we've already seen
+			for(int j=0; j<i; ++j) {
+				if (
+					Approx(vbuf[i], vbuf[j]) && 
+					(cbuf.Length > 0 && cbuf[i].ARGB() == cbuf[j].ARGB()) &&
+					Approx(nbuf[i], nbuf[j]) && 
+					Approx(tbuf[i], tbuf[j])
+				) {
+					oldToNew[j] = i;
+					++dedupCount;
+					break;
+				}
+			}
+		}
+		
+		if (dedupCount > 0) {
+			for(int i=0; i<ibuf.Length; ++i) {
+				ibuf[i] = oldToNew[ibuf[i]];
+			}
+			mesh.triangles = ibuf;
+			return mesh.RemoveUnusedVertices();
+		} else {
+			return 0;
+		}
+	}
+	
 }
 
