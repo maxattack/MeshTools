@@ -18,10 +18,14 @@
 //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 //THE SOFTWARE.
 // 
-// ORIGIN JAVASCRIPT IMPLEMENTATION BY EVAN WALLACE
+// ORIGINAL JAVASCRIPT IMPLEMENTATION BY EVAN WALLACE
 // https://github.com/evanw/csg.js/
 //
-// ADAPTED TO UNITY/C# BY MAX KAUFMANN
+// ADAPRTED TO UNITY/C# BY MAX KAUFMANN
+// - Renamed CSG to Solid
+// - Added Polygon.Simplify(), Solid.Simplify()
+// - Various Microoptimizations
+// - Added UnityEngine Mesh Asset Import / Export
 // https://github.com/maxattack/MeshTools
 
 
@@ -82,17 +86,108 @@ namespace CSG {
 			get { return new Plane(vertices[0].pos, vertices[1].pos, vertices[2].pos); }
 		}
 		
+		// Compute (and memoize) a flipped version of this polygon
+		
+		Vertex[] DoFlipVerts()
+		{
+			var verts = new Vertex[vertices.Length];
+			for(int i=0; i<verts.Length; ++i) {
+				verts[i] = vertices[vertices.Length-1-i].Flipped;
+			}
+			return verts;
+		}
+		
 		public Polygon Flipped()
 		{
 			if (flipped == null) {
-				var verts = new Vertex[vertices.Length];
-				for(int i=0; i<verts.Length; ++i) {
-					verts[i] = vertices[vertices.Length-1-i].Flipped;
-				}
-				flipped = new Polygon(verts) { shared = shared };
+				flipped = new Polygon(DoFlipVerts()) { shared = shared };
 				flipped.flipped = this;
 			}
 			return flipped;
+		}
+		
+		public bool IsConvex()
+		{
+			// A polygon is convex is all the angles are "the same way", i.e., the 
+			// cross products are all pointing in the same direction
+			var c0 = Vector3.Cross(vertices[1].pos - vertices[0].pos, vertices[2].pos - vertices[0].pos); 
+			for(int i=1; i<vertices.Length; ++i) {
+				var v0 = vertices[i];
+				var v1 = vertices[(i+1) % vertices.Length];
+				var v2 = vertices[(i+2) % vertices.Length];
+				var c = Vector3.Cross(v1.pos - v0.pos, v2.pos - v0.pos);
+				if (Vector3.Dot(c, c0) < 0f) { return false; }
+			}
+			return true;
+		}
+		
+		// Attempt to join this polygon with another, otherwise return null.
+		
+		public Polygon TryJoin(Polygon other) {
+			
+			// must be coplanar
+			if (this != other && this.shared == other.shared && this.Plane.Approx(other.Plane)) {
+				// must have a common edge
+				for(int i=0; i<vertices.Length; ++i) {
+					int i1 = (i + 1) % vertices.Length;
+					for(int j=0; j<other.vertices.Length; ++j) {
+						int j1 = (j + 1) % other.vertices.Length;
+						if (
+							vertices[i].pos.Approx(other.vertices[j1].pos) && 
+							vertices[i1].pos.Approx(other.vertices[j].pos)
+						) {
+							
+							// splice vertices together
+							var newVertices = new Vertex[vertices.Length + other.vertices.Length - 2];
+							int n = 0;
+							for(int k=0; k<=i; ++k) { newVertices[n++] = vertices[k]; }
+							for(int k=other.vertices.Length-1; k>1; --k) {
+								newVertices[n++] = other.vertices[(j+k) % other.vertices.Length];
+							}
+							for(int k=i+1; k<vertices.Length; ++k) { newVertices[n++] = vertices[k]; }
+							
+							var poly = new Polygon(newVertices) { shared = shared };
+							
+							// must be convex
+							if (poly.IsConvex()) { 
+								return poly; 
+							}
+							
+						}
+							
+					}
+				}
+			}
+			
+			// could not join
+			return null;
+		}
+		
+		static float Inv(float from, float to, float t) { return (t - from) / (to - from); }
+		
+		// Remove colinear vertices (all vertex attribs, not just position)
+		
+		public Polygon Simplified()
+		{
+			const float EPSILON_SQ = 0.001f * 0.001f;
+			var verts = new List<Vertex>(vertices.Length); verts.AddRange(vertices);
+			for(int i=0; verts.Count > 3 && i < verts.Count; ) {
+				
+				// is vertex "i" colinear?
+				var i0 = (i + verts.Count - 1) % verts.Count;
+				var i1 = (i + 1) % verts.Count;
+				var v = verts[i].pos;
+				var v0 = verts[i0].pos;
+				var v1 = verts[i1].pos;
+				if (Vector3.Cross(v0-v, v1-v).sqrMagnitude < EPSILON_SQ) {
+					verts.RemoveAt(i);
+				} else {
+					++i;
+				}
+			}
+			
+			return new Polygon(verts.ToArray()) { shared = shared };
+
 		}
 	}
 	
@@ -182,7 +277,7 @@ namespace CSG {
 			b.ClipTo(a);
 			b.Invert();
 			a.Build(b.AllPolygons());
-			return new Solid(a.AllPolygons().ToArray());		
+			return new Solid(a.AllPolygons().ToArray()).Simplified();		
 		}
 		
 		// Return a new CSG solid representing space in this solid but not in the solid csg. 
@@ -213,7 +308,7 @@ namespace CSG {
 			b.Invert();
 			a.Build(b.AllPolygons());
 			a.Invert();
-			return new Solid(a.AllPolygons().ToArray());
+			return new Solid(a.AllPolygons().ToArray()).Simplified();
 		}
 		
 		// Return a new CSG solid representing space both this solid and in the solid csg. 
@@ -243,7 +338,7 @@ namespace CSG {
 			b.ClipTo(a);
 			a.Build(b.AllPolygons());
 			a.Invert();
-			return new Solid(a.AllPolygons().ToArray());
+			return new Solid(a.AllPolygons().ToArray()).Simplified();
 		}
 		
 		// Return a new CSG solid with solid and empty space switched. 
@@ -258,7 +353,35 @@ namespace CSG {
 			return new Solid(result);
 		}
 		
-
+		public Solid Simplified()
+		{
+			List<Polygon> polygons = new List<Polygon>(this.polygons.Length);
+			foreach(var poly in this.polygons) {
+				polygons.Add(poly.Simplified());
+			}
+			
+			// go through pairs in the list, looking for polygons we can join
+			var match = true;
+			do {
+				match = false;
+				for(int i=0; i<polygons.Count; ++i) {
+					for(int j=0; j<polygons.Count; ++j) {
+						var result = polygons[i].TryJoin(polygons[j]);
+						if (result != null) {
+							polygons[i] = result;
+							polygons.RemoveAt(j);
+							match = true;
+							goto BreakOut;
+						}
+					}
+				}
+				BreakOut:;
+			} while(match);
+			
+			Debug.Log(polygons.Count + " / " + this.polygons.Length);
+			
+			return new Solid(polygons.ToArray());
+		}
 	}
 	
 	// Holds a node in a BSP tree. A BSP tree is built from a collection of 
@@ -363,6 +486,36 @@ namespace CSG {
 			result.distance = -plane.distance;
 			return result;
 		}
+		
+		public static bool Approx(float a, float b)
+		{
+			var diff = a - b;
+			return diff > -EPSILON && diff < EPSILON;
+		}
+		
+		public static bool Approx(this Plane p0, Plane p1)
+		{
+			return 
+				Approx(p0.distance, p1.distance) && 
+				Approx(Vector3.Dot(p0.normal, p1.normal), 1f);
+		}
+		
+		public static bool Approx(this Vector2 u, Vector2 v) 
+		{
+			return 
+				Approx(u.x, v.x) && 
+				Approx(u.y, v.y);
+		}
+		
+		public static bool Approx(this Vector3 u, Vector3 v) 
+		{
+			return 
+				Approx(u.x, v.x) && 
+				Approx(u.y, v.y) && 
+				Approx(u.z, v.z);
+		}
+		
+		
 		
 		const int COPLANAR = 0;
 		const int FRONT = 1;

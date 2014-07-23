@@ -69,14 +69,15 @@ public static class MeshTools {
 			.ToArray();
 		
 		if (solids.Length == 1) {
-			
-			var subs = GameObject.FindObjectsOfType<MeshFilter>()
+			var filters = GameObject.FindObjectsOfType<MeshFilter>();
+			var subs = filters
 				.Where(filter => !Selection.gameObjects.Contains(filter.gameObject))
 				.Select(filter => filter.CreateSolid())
 				.ToArray();
 			
 			if (subs.Length == 1) {
 				solids[0].Subtract(subs[0]).CreateGameObject("Difference");
+				filters[0].gameObject.SetActive(false);
 			}
 				
 			
