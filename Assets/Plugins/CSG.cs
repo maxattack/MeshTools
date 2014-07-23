@@ -106,6 +106,17 @@ namespace CSG {
 			return flipped;
 		}
 		
+		public bool IsDegenerate()
+		{
+			for(int i=0; i<vertices.Length; ++i) {
+				var i1 = (i + 1) % vertices.Length;
+				if (vertices[i].pos.Approx(vertices[i1].pos)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		
 		public bool IsConvex()
 		{
 			// A polygon is convex is all the angles are "the same way", i.e., the 
@@ -140,12 +151,12 @@ namespace CSG {
 							// splice vertices together
 							var newVertices = new Vertex[vertices.Length + other.vertices.Length - 2];
 							int n = 0;
-							for(int k=0; k<=i; ++k) { newVertices[n++] = vertices[k]; }
-							for(int k=other.vertices.Length-1; k>1; --k) {
-								newVertices[n++] = other.vertices[(j+k) % other.vertices.Length];
+							for(int k=0; k<vertices.Length; ++k) { 
+								newVertices[n++] = vertices[(i1+k)%vertices.Length]; 
 							}
-							for(int k=i+1; k<vertices.Length; ++k) { newVertices[n++] = vertices[k]; }
-							
+							for(int k=other.vertices.Length-2; k>0; --k) {
+								newVertices[n++] = other.vertices[(j1+k) % other.vertices.Length];
+							}
 							var poly = new Polygon(newVertices) { shared = shared };
 							
 							// must be convex
@@ -357,22 +368,23 @@ namespace CSG {
 		{
 			List<Polygon> polygons = new List<Polygon>(this.polygons.Length);
 			foreach(var poly in this.polygons) {
-				polygons.Add(poly.Simplified());
+				if (!poly.IsDegenerate()) {
+					polygons.Add(poly.Simplified());
+				}
 			}
 			
 			// go through pairs in the list, looking for polygons we can join
 			var match = true;
 			do {
 				match = false;
-				for(int i=0; i<polygons.Count; ++i) {
-					for(int j=0; j<polygons.Count; ++j) {
-						var result = polygons[i].TryJoin(polygons[j]);
-						if (result != null) {
-							polygons[i] = result;
-							polygons.RemoveAt(j);
-							match = true;
-							goto BreakOut;
-						}
+				for(int i=0; i<polygons.Count; ++i)
+				for(int j=0; j<i; ++j) {
+					var result = polygons[i].TryJoin(polygons[j]);
+					if (result != null) {
+						polygons[j] = result;
+						polygons.RemoveAt(i);
+						match = true;
+						goto BreakOut;
 					}
 				}
 				BreakOut:;
