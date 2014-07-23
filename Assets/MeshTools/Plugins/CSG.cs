@@ -33,6 +33,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using uRandom = UnityEngine.Random;
 
 namespace CSG {
 	
@@ -157,7 +158,9 @@ namespace CSG {
 							for(int k=other.vertices.Length-2; k>0; --k) {
 								newVertices[n++] = other.vertices[(j1+k) % other.vertices.Length];
 							}
-							var poly = new Polygon(newVertices) { shared = shared };
+							var poly = (
+								new Polygon(newVertices) { shared = shared }
+							).Simplified();
 							
 							// must be convex
 							if (poly.IsConvex()) { 
@@ -180,7 +183,7 @@ namespace CSG {
 		
 		public Polygon Simplified()
 		{
-			const float EPSILON_SQ = 0.001f * 0.001f;
+			const float EPSILON_SQ = 0.002f * 0.002f;
 			var verts = new List<Vertex>(vertices.Length); verts.AddRange(vertices);
 			for(int i=0; verts.Count > 3 && i < verts.Count; ) {
 				
@@ -470,7 +473,7 @@ namespace CSG {
 		{
 			if (aPolygons.Count == 0) { return; }
 			if (plane == null) { 
-				plane = aPolygons[0].Plane; 
+				plane = aPolygons[uRandom.Range(0, aPolygons.Count)].Plane; 
 			}
 			var front = new List<Polygon>();
 			var back = new List<Polygon>();
