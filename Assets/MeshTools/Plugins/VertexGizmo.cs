@@ -13,7 +13,7 @@ public class VertexGizmo : MonoBehaviour {
 		var cbuf = mesh.colors;
 		for(int i=0; i<vbuf.Length; ++i) {
 			var p0 = xform.TransformPoint(vbuf[i]);
-			Gizmos.color = cbuf[i];
+			Gizmos.color = cbuf.Length == 0 ? Color.white : cbuf[i];
 			Gizmos.DrawCube(p0, sz);		
 		}
 		

@@ -1,22 +1,34 @@
-﻿using CSG;
+﻿//The MIT License (MIT)
+//	
+//Permission is hereby granted, free of charge, to any person obtaining a copy
+//of this software and associated documentation files (the "Software"), to deal
+//in the Software without restriction, including without limitation the rights
+//to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//copies of the Software, and to permit persons to whom the Software is
+//furnished to do so, subject to the following conditions:
+//
+//The above copyright notice and this permission notice shall be included in
+//all copies or substantial portions of the Software.
+//
+//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//THE SOFTWARE.
+// 
+// ORIGINALLY DEVELOPED BY MAX KAUFMANN
+// https://github.com/maxattack/MeshTools
+
+using CSG;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-public struct Face {
-	public Color32 color;
-	public IList<int> vertices;
-	
-	public Face(Color32 aColor, IList<int> aVertices) {
-		color = aColor;
-		vertices = aVertices;
-	}
-	
-}
-
-public static class MeshExtensions
+public static partial class MeshExtensions
  {
 	// GIFT IDEAS: 
 	// - Coalesce Adjacent Coplanar Faces
@@ -28,31 +40,31 @@ public static class MeshExtensions
 	// Given the following logical positions and faces, 
 	// compute raw vertices, normals, and triangles.
 	// TODO: UV sets?
-	public static void CreateModel(this Mesh mesh, IList<Vector3> positions, IList<Face> faces) 
+	
+	public static void CreateModel(this Mesh mesh, IList<Vector3> positions, IList<IList<int>> faces) 
 	{
 		
 		// validate the input while we count up the magnitudes
 		int totalVertices = 0; 
 		int totalTriangles = 0;
 		foreach (var face in faces) { 
-			if (face.vertices.Count < 3) {
+			if (face.Count < 3) {
 				Debug.LogWarning("Face has Too Few Vertices");
 				return;
 			}
-			foreach(var vert in face.vertices) {
+			foreach(var vert in face) {
 				if (vert < 0 || vert >= positions.Count) {
 					Debug.LogWarning("Index out of Bounds :P");
 					return;
 				}
 			}
-			totalVertices += face.vertices.Count; 
-			totalTriangles += face.vertices.Count-2;
+			totalVertices += face.Count; 
+			totalTriangles += face.Count-2;
 		}
 		
 		// plot vertices
 		var vbuf = new Vector3[totalVertices]; 
 		var nbuf = new Vector3[totalVertices];
-		var cbuf = new Color32[totalVertices];
 		var tbuf = new Vector2[totalVertices];
 		var ibuf = new int[3 * totalTriangles];
 		int i=0, j=0;
@@ -62,21 +74,20 @@ public static class MeshExtensions
 			// be "fanned out" from the first vertex.  This limits us to 
 			// convex shapes.  (Perhaps there's some ear-cutting in Unity's
 			// 2D API that we can leverage?)
-			for(int k=0; k<face.vertices.Count-2; ++k) {
+			for(int k=0; k<face.Count-2; ++k) {
 				ibuf[j++] = i;
 				ibuf[j++] = i+k+1;
 				ibuf[j++] = i+k+2;
 			}
 			
 			var normal = Vector3.Cross(
-				positions[face.vertices[1]] - positions[face.vertices[0]],
-				positions[face.vertices[2]] - positions[face.vertices[0]]
+				positions[face[1]] - positions[face[0]],
+				positions[face[2]] - positions[face[0]]
 			).normalized;
 			
-			foreach(var vert in face.vertices) {
+			foreach(var vert in face) {
 				vbuf[i] = positions[vert];
 				nbuf[i] = normal;
-				cbuf[i] = face.color;
 				tbuf[i] = Vector2.zero;
 				++i;
 			}
@@ -85,21 +96,30 @@ public static class MeshExtensions
 		
 		mesh.vertices = vbuf;
 		mesh.normals = nbuf;
-		mesh.colors32 = cbuf;
 		mesh.uv = tbuf;
 		mesh.triangles = ibuf;
 		mesh.RecalculateNormals();
 		mesh.RecalculateBounds();
 		mesh.Optimize();
-		
-		
 	}
+	
+	// Set all the vertices of the given mesh to the given color
+	
+	public static void SetColor(this Mesh mesh, Color32 c)
+	{
+		var cbuf = mesh.colors32;
+		if (cbuf.Length == 0) { cbuf = new Color32[mesh.vertexCount]; }
+		for(int i=0; i<cbuf.Length; ++i) { cbuf[i] = c; }
+		mesh.colors32 = cbuf;
+	}
+	
+	// Recursively look up MeshFilters, and if there's more than one then combine them
+	// all into a single mesh in the root.
 	
 	public static void FlattenMeshes(this GameObject go)
 	{
-		Debug.Log ("Bloop?");
 		var filters = go.GetComponentsInChildren<MeshFilter>();
-		if (filters.Length == 0) { Debug.Log ("DERP"); return; }
+		if (filters.Length <= 1) { return; }
 		
 		var filter = go.GetComponent<MeshFilter>();
 		if (filter == null) {
@@ -130,21 +150,12 @@ public static class MeshExtensions
 		filter.sharedMesh = result;
 	}
 	
-	static bool Same(int i0, int i1, int i2, int j0, int j1, int j2) 
-	{
-		// used in deduping faces
-		return (i0 == j0 && i1 == j1 && i2 == j2) || // all same
-		       (i0 == j0 && i1 == j2 && i2 == j1) || // just 0 same
-		       (i0 == j2 && i1 == j1 && i2 == j0) || // just 1 same
-		       (i0 == j1 && i1 == j0 && i2 == j2) || // just 2 same
-		       (i0 == j1 && i1 == j2 && i2 == j0) || // rotated right
-		       (i0 == j2 && i1 == j0 && i2 == j1) ;  // rotated left
-	}
+	// Search for co-incident triangles, and if they're facing the same way remove one,
+	// otherwise if they've facing each other remove both (like they're "cancelling each
+	// other out"), and return the number removed.
 	
 	public static int RemoveInternalFaces(this Mesh mesh)
 	{
-		// iterate through each pair of faces, and remove those that have co-incident vertices
-		// and are facing each other
 		
 		var vbuf = mesh.vertices;
 		var ibuf = mesh.triangles;
@@ -207,6 +218,20 @@ public static class MeshExtensions
 		}
 	}
 	
+	static bool Same(int i0, int i1, int i2, int j0, int j1, int j2) 
+	{
+		// used in deduping faces
+		return (i0 == j0 && i1 == j1 && i2 == j2) || // all same
+			(i0 == j0 && i1 == j2 && i2 == j1) || // just 0 same
+				(i0 == j2 && i1 == j1 && i2 == j0) || // just 1 same
+				(i0 == j1 && i1 == j0 && i2 == j2) || // just 2 same
+				(i0 == j1 && i1 == j2 && i2 == j0) || // rotated right
+				(i0 == j2 && i1 == j0 && i2 == j1) ;  // rotated left
+	}
+	
+	// Identify and remove vertices that are not references by the 
+	// index buffer, and return the number removed.
+			
 	public static int RemoveUnusedVertices(this Mesh mesh)
 	{
 		var vbuf = mesh.vertices;
@@ -253,7 +278,9 @@ public static class MeshExtensions
 		
 	}
 	
-	static int ARGB(this Color32 c) { return (c.a << 24) + (c.r << 16) + (c.g << 8) + c.b; }
+	// Search the vertex/normal/texture/color buffers and dedup values,
+	// updating the index buffer to reflect the compacted array.  Returns
+	// the number of dups removed.
 	
 	public static int DedupVertices(this Mesh mesh)
 	{
@@ -269,6 +296,7 @@ public static class MeshExtensions
 		
 		for(int i=0; i<vbuf.Length; ++i) {
 			oldToNew[i] = i;
+			
 			// check to see if we match any vertices we've already seen
 			for(int j=0; j<i; ++j) {
 				if (
@@ -285,15 +313,19 @@ public static class MeshExtensions
 		}
 		
 		if (dedupCount > 0) {
-			for(int i=0; i<ibuf.Length; ++i) {
-				ibuf[i] = oldToNew[ibuf[i]];
-			}
+			for(int i=0; i<ibuf.Length; ++i) { ibuf[i] = oldToNew[ibuf[i]]; }
 			mesh.triangles = ibuf;
 			return mesh.RemoveUnusedVertices();
 		} else {
 			return 0;
 		}
 	}
+	
+	static int ARGB(this Color32 c) 
+	{ 
+		return (c.a << 24) + (c.r << 16) + (c.g << 8) + c.b; 
+	}
+	
 	
 }
 

@@ -9,7 +9,6 @@ public class NormalGizmo : MonoBehaviour {
 		Gizmos.color = Color.yellow;
 		var mesh = GetComponent<MeshFilter>().sharedMesh;
 		var xform = GetComponent<Transform>();
-		var sz = 0.025f * Vector3.one;
 		var vbuf = mesh.vertices;
 		var nbuf = mesh.normals;
 		for(int i=0; i<vbuf.Length; ++i) {

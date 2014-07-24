@@ -275,7 +275,7 @@ namespace CSG {
 				colors32 = cbuf.ToArray(),
 				triangles = ibuf.ToArray()
 			};
-			mesh.CleanupInternalVertices();
+			mesh.RemoveGarbageGeometry();
 			mesh.Optimize();
 			go.GetComponent<MeshFilter>().sharedMesh = mesh;
 			return go;
@@ -436,7 +436,6 @@ namespace CSG {
 				coplanars.Clear();
 			}
 			
-			Debug.Log(result.Count + " / " + polygons.Count);
 			return new Solid(result);
 		}
 	}
