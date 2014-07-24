@@ -207,7 +207,7 @@ public static class MeshExtensions
 		}
 	}
 	
-	static int RemoveUnusedVertices(this Mesh mesh)
+	public static int RemoveUnusedVertices(this Mesh mesh)
 	{
 		var vbuf = mesh.vertices;
 		var cbuf = mesh.colors32;
@@ -273,8 +273,8 @@ public static class MeshExtensions
 			for(int j=0; j<i; ++j) {
 				if (
 					vbuf[i].Approx(vbuf[j]) && 
-					(cbuf.Length > 0 && cbuf[i].ARGB() == cbuf[j].ARGB()) &&
-					nbuf[i].Approx(nbuf[j]) && 
+					(cbuf.Length == 0 || cbuf[i].ARGB() == cbuf[j].ARGB()) &&
+					Vector3.Dot(nbuf[i], nbuf[j]).Approx(1f) && 
 					tbuf[i].Approx(tbuf[j])
 				) {
 					oldToNew[j] = i;

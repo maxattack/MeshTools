@@ -42,6 +42,13 @@ public static class MeshTools {
 		
 	}
 	
+	[MenuItem("CONTEXT/MeshFilter/Cleanup")]
+	static void Cleanup()
+	{
+		var mesh = Selection.activeGameObject.GetComponent<MeshFilter>().mesh;
+		mesh.CleanupInternalVertices();
+	}
+	
 	[MenuItem("CONTEXT/MeshFilter/Create Asset")]
 	static void CreateAssetForMesh()
 	{

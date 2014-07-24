@@ -23,7 +23,7 @@
 //
 // ADAPRTED TO UNITY/C# BY MAX KAUFMANN
 // - Renamed CSG to Solid
-// - Added Polygon.Simplify(), Solid.Simplify()
+// - Added Simplified()
 // - Various Microoptimizations
 // - Added UnityEngine Mesh Asset Import / Export
 // https://github.com/maxattack/MeshTools
@@ -74,7 +74,7 @@ namespace CSG {
 	// A generalization of a mesh face that can have >3 points
 	public class Polygon
 	{
-		public Vertex[] vertices;
+		public readonly IList<Vertex> vertices;
 		public object shared = null;
 		Polygon flipped = null;
 		
@@ -83,20 +83,29 @@ namespace CSG {
 			vertices = args;
 		}
 		
-		public Plane Plane {
+		public Polygon(IList<Vertex> vertices)
+		{
+			this.vertices = vertices;
+		}
+		
+		// Each polygon is assumed to be planar.  The normal direction is determined
+		// by the winding order of the vertices
+		
+		public Plane Plane 
+		{
 			get { return new Plane(vertices[0].pos, vertices[1].pos, vertices[2].pos); }
 		}
 		
-		// Compute (and memoize) a flipped version of this polygon
-		
 		Vertex[] DoFlipVerts()
 		{
-			var verts = new Vertex[vertices.Length];
+			var verts = new Vertex[vertices.Count];
 			for(int i=0; i<verts.Length; ++i) {
-				verts[i] = vertices[vertices.Length-1-i].Flipped;
+				verts[i] = vertices[vertices.Count-1-i].Flipped;
 			}
 			return verts;
 		}
+		
+		// Compute (and memoize) a flipped version of this polygon
 		
 		public Polygon Flipped()
 		{
@@ -109,8 +118,8 @@ namespace CSG {
 		
 		public bool IsDegenerate()
 		{
-			for(int i=0; i<vertices.Length; ++i) {
-				var i1 = (i + 1) % vertices.Length;
+			for(int i=0; i<vertices.Count; ++i) {
+				var i1 = (i + 1) % vertices.Count;
 				if (vertices[i].pos.Approx(vertices[i1].pos)) {
 					return true;
 				}
@@ -123,44 +132,46 @@ namespace CSG {
 			// A polygon is convex is all the angles are "the same way", i.e., the 
 			// cross products are all pointing in the same direction
 			var c0 = Vector3.Cross(vertices[1].pos - vertices[0].pos, vertices[2].pos - vertices[0].pos); 
-			for(int i=1; i<vertices.Length; ++i) {
+			for(int i=1; i<vertices.Count; ++i) {
 				var v0 = vertices[i];
-				var v1 = vertices[(i+1) % vertices.Length];
-				var v2 = vertices[(i+2) % vertices.Length];
+				var v1 = vertices[(i+1) % vertices.Count];
+				var v2 = vertices[(i+2) % vertices.Count];
 				var c = Vector3.Cross(v1.pos - v0.pos, v2.pos - v0.pos);
 				if (Vector3.Dot(c, c0) < 0f) { return false; }
 			}
 			return true;
 		}
 		
-		// Attempt to join this polygon with another, otherwise return null.
+		// Attempt to join this polygon with another along a common edge, 
+		// otherwise return null. Assumes polygons are convex and coplanar.
 		
-		public Polygon TryJoin(Polygon other) {
+		internal Polygon TryJoin(Polygon other) {
 			
-			// must be coplanar
-			if (this != other && this.shared == other.shared && this.Plane.Approx(other.Plane)) {
+			// must be distinct, in the same "share group", and coplanar
+			if (this != other && this.shared == other.shared) {
+				
 				// must have a common edge
-				for(int i=0; i<vertices.Length; ++i) {
-					int i1 = (i + 1) % vertices.Length;
-					for(int j=0; j<other.vertices.Length; ++j) {
-						int j1 = (j + 1) % other.vertices.Length;
+				for(int i=0; i<vertices.Count; ++i) {
+					int i1 = (i + 1) % vertices.Count;
+					for(int j=0; j<other.vertices.Count; ++j) {
+						int j1 = (j + 1) % other.vertices.Count;
 						if (
 							vertices[i].pos.Approx(other.vertices[j1].pos) && 
 							vertices[i1].pos.Approx(other.vertices[j].pos)
 						) {
 							
 							// splice vertices together
-							var newVertices = new Vertex[vertices.Length + other.vertices.Length - 2];
+							var newVertices = new Vertex[vertices.Count + other.vertices.Count - 2];
 							int n = 0;
-							for(int k=0; k<vertices.Length; ++k) { 
-								newVertices[n++] = vertices[(i1+k)%vertices.Length]; 
+							for(int k=0; k<vertices.Count; ++k) { 
+								newVertices[n++] = vertices[(i1+k)%vertices.Count]; 
 							}
-							for(int k=other.vertices.Length-2; k>0; --k) {
-								newVertices[n++] = other.vertices[(j1+k) % other.vertices.Length];
+							for(int k=other.vertices.Count-2; k>0; --k) {
+								newVertices[n++] = other.vertices[(j1+k) % other.vertices.Count];
 							}
-							var poly = (
-								new Polygon(newVertices) { shared = shared }
-							).Simplified();
+							var poly = new Polygon(newVertices) 
+								{ shared = shared }
+								.Simplified();
 							
 							// must be convex
 							if (poly.IsConvex()) { 
@@ -183,24 +194,25 @@ namespace CSG {
 		
 		public Polygon Simplified()
 		{
-			const float EPSILON_SQ = 0.002f * 0.002f;
-			var verts = new List<Vertex>(vertices.Length); verts.AddRange(vertices);
+			const float EPSILON_SQ = 0.0025f * 0.0025f;
+			var verts = new List<Vertex>(vertices.Count); 
+			verts.AddRange(vertices);
 			for(int i=0; verts.Count > 3 && i < verts.Count; ) {
 				
 				// is vertex "i" colinear?
 				var i0 = (i + verts.Count - 1) % verts.Count;
 				var i1 = (i + 1) % verts.Count;
 				var v = verts[i].pos;
-				var v0 = verts[i0].pos;
-				var v1 = verts[i1].pos;
-				if (Vector3.Cross(v0-v, v1-v).sqrMagnitude < EPSILON_SQ) {
+				var dv0 = (verts[i0].pos-v).normalized;
+				var dv1 = (verts[i1].pos-v).normalized;
+				if (Vector3.Cross(dv0, dv1).sqrMagnitude < EPSILON_SQ) {
 					verts.RemoveAt(i);
 				} else {
 					++i;
 				}
 			}
 			
-			return new Polygon(verts.ToArray()) { shared = shared };
+			return new Polygon(verts) { shared = shared };
 
 		}
 	}
@@ -209,7 +221,12 @@ namespace CSG {
 	// Two solids can be combined using the union(), subtract(), and intersect() methods.
 	public class Solid 
 	{
-		public readonly Polygon[] polygons;
+		public readonly IList<Polygon> polygons;
+		
+		public Solid (IList<Polygon> args) 
+		{
+			polygons = args;
+		}
 		
 		public Solid(params Polygon[] args)
 		{
@@ -218,7 +235,7 @@ namespace CSG {
 
 		public GameObject CreateGameObject(string name="Result")
 		{
-			if (polygons.Length == 0) {
+			if (polygons.Count == 0) {
 				Debug.LogWarning("Empty Solid :*(");
 				return null;
 			}
@@ -236,7 +253,7 @@ namespace CSG {
 			var ibuf = new List<int>();
 			
 			foreach(var poly in polygons) {
-				int ntriangles = poly.vertices.Length-2;
+				int ntriangles = poly.vertices.Count-2;
 				for(int i=0; i<ntriangles; ++i) {
 					ibuf.Add (vbuf.Count);
 					ibuf.Add (vbuf.Count + 1 + i);
@@ -258,8 +275,7 @@ namespace CSG {
 				colors32 = cbuf.ToArray(),
 				triangles = ibuf.ToArray()
 			};
-			
-			mesh.DedupVertices();
+			mesh.CleanupInternalVertices();
 			mesh.Optimize();
 			go.GetComponent<MeshFilter>().sharedMesh = mesh;
 			return go;
@@ -360,42 +376,68 @@ namespace CSG {
 		
 		public Solid Inverse()
 		{
-			var result = new Polygon[polygons.Length];
-			for(int i=0; i<polygons.Length; ++i) {
+			var result = new Polygon[polygons.Count];
+			for(int i=0; i<polygons.Count; ++i) {
 				result[i] = polygons[i].Flipped();
 			}
 			return new Solid(result);
 		}
 		
+		// Return a simplified solid that adjacent coplanar faces
 		public Solid Simplified()
 		{
-			List<Polygon> polygons = new List<Polygon>(this.polygons.Length);
-			foreach(var poly in this.polygons) {
+			// This is an "off the top of my head" implementation, and kinda
+			// sucks.  In particular, it doesn't remove interior vertices. The
+			// "real" solution should merge whole "islands" 
+			
+			
+			// First make a "inbox" scratchpad of "simplified" polygons
+			List<Polygon> inbox = new List<Polygon>(polygons.Count);
+			foreach(var poly in polygons) {
 				if (!poly.IsDegenerate()) {
-					polygons.Add(poly.Simplified());
+					inbox.Add(poly.Simplified());
 				}
 			}
 			
-			// go through pairs in the list, looking for polygons we can join
-			var match = true;
-			do {
-				match = false;
-				for(int i=0; i<polygons.Count; ++i)
-				for(int j=0; j<i; ++j) {
-					var result = polygons[i].TryJoin(polygons[j]);
-					if (result != null) {
-						polygons[j] = result;
-						polygons.RemoveAt(i);
-						match = true;
-						goto BreakOut;
+			// Now, in two steps, move polygons from "inbox" to "coplanars",
+			// dedup, and then move "coplanars" to "result" until
+			// the inbox is empty.
+			var coplanars = new List<Polygon>(polygons.Count);
+			var result = new List<Polygon>(polygons.Count);
+			while(inbox.Count > 0) {
+			
+				// find a coplanar subset
+				coplanars.Add(inbox[inbox.Count-1]);
+				inbox.RemoveAt(inbox.Count-1);
+				var plane = coplanars[0].Plane;
+				for(int i=0; i<inbox.Count; ) {
+					if (inbox[i].Plane.Approx(plane)) {
+						coplanars.Add(inbox[i]);
+						inbox.RemoveAt (i);
+					} else {
+						++i;
 					}
 				}
-				BreakOut:;
-			} while(match);
+				
+				// go through pairs in the list, looking for polygons we can join
+				StartOver:
+				for(int i=0; i<coplanars.Count; ++i)
+				for(int j=0; j<i; ++j) {
+					var joined = coplanars[i].TryJoin(coplanars[j]);
+					if (joined != null) {
+						coplanars[j] = joined;
+						coplanars.Remove(coplanars[i]);
+						goto StartOver;
+					}
+				}
+				
+				// flush coplanars to result
+				result.AddRange(coplanars);
+				coplanars.Clear();
+			}
 			
-			Debug.Log(polygons.Count + " / " + this.polygons.Length);
-			
-			return new Solid(polygons.ToArray());
+			Debug.Log(result.Count + " / " + polygons.Count);
+			return new Solid(result);
 		}
 	}
 	
@@ -502,7 +544,7 @@ namespace CSG {
 			return result;
 		}
 		
-		public static bool Approx(float a, float b)
+		public static bool Approx(this float a, float b)
 		{
 			var diff = a - b;
 			return diff > -EPSILON && diff < EPSILON;
@@ -545,7 +587,7 @@ namespace CSG {
 		                                  List<Polygon> front, List<Polygon> back) 
 		{
 			var polygonType = 0;
-			var pTypes = new List<int>(polygon.vertices.Length);
+			var pTypes = new List<int>(polygon.vertices.Count);
 			foreach(var vertex in polygon.vertices) {
 				var t = plane.GetDistanceToPoint(vertex.pos);
 				var pType = (t < -EPSILON) ? BACK : (t > EPSILON) ? FRONT : COPLANAR;
@@ -570,8 +612,8 @@ namespace CSG {
 			case SPANNING:
 				frontBuf.Clear();
 				backBuf.Clear();
-				for(int i=0; i<polygon.vertices.Length; ++i) {
-					var j = (i + 1) % polygon.vertices.Length;
+				for(int i=0; i<polygon.vertices.Count; ++i) {
+					var j = (i + 1) % polygon.vertices.Count;
 					var ti = pTypes[i];
 					var tj = pTypes[j];
 					var vi = polygon.vertices[i]; 
