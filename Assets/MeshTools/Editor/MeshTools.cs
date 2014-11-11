@@ -31,6 +31,63 @@ using UnityEngine;
 
 public static class MeshTools {
 	
+	static bool GetTwoMeshFilters(out MeshFilter m1, out MeshFilter m2)
+	{
+		if (Selection.gameObjects.Length != 2) { 
+			m1 = null; m2 = null;
+			return false; 
+		}
+		
+		m1 = Selection.activeGameObject.GetComponent<MeshFilter>();
+		m2 = Selection.gameObjects[0] == Selection.activeGameObject ? 
+			Selection.gameObjects[1].GetComponent<MeshFilter>() : 
+			Selection.gameObjects[0].GetComponent<MeshFilter>() ;
+		
+		if (m1 == null || m2 == null) { 
+			m1 = null;
+			m2 = null;
+			return false; 
+		}
+		
+		return true;
+	}
+	
+	[MenuItem("MeshTools/Union _u")]
+	static void Union()
+	{
+		MeshFilter m1, m2;
+		if (!GetTwoMeshFilters(out m1, out m2)) { EditorApplication.Beep(); return; }	
+		var s1 = m1.CreateSolid();
+		var s2 = m2.CreateSolid();
+		s1.Union(s2).CreateGameObject();
+		m1.gameObject.SetActive(false);
+		m2.gameObject.SetActive(false);
+	}
+	
+	[MenuItem("MeshTools/Intersect _i")]
+	static void Intersect()
+	{
+		MeshFilter m1, m2;
+		if (!GetTwoMeshFilters(out m1, out m2)) { EditorApplication.Beep(); return; }	
+		var s1 = m1.CreateSolid();
+		var s2 = m2.CreateSolid();
+		s1.Intersect(s2).CreateGameObject();
+		m1.gameObject.SetActive(false);
+		m2.gameObject.SetActive(false);
+	}
+	
+	[MenuItem("MeshTools/Subtract _s")]
+	static void Subtract()
+	{
+		MeshFilter m1, m2;
+		if (!GetTwoMeshFilters(out m1, out m2)) { EditorApplication.Beep(); return; }	
+		var s1 = m1.CreateSolid();
+		var s2 = m2.CreateSolid();
+		s1.Subtract(s2).CreateGameObject();
+		m1.gameObject.SetActive(false);
+		m2.gameObject.SetActive(false);
+	}
+	
 	[MenuItem("MeshTools/Flatten Meshes")]
 	static void DoFlattenMeshes()
 	{

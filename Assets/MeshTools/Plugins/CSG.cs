@@ -307,7 +307,7 @@ namespace CSG {
 			b.ClipTo(a);
 			b.Invert();
 			a.Build(b.AllPolygons());
-			return new Solid(a.AllPolygons().ToArray()).Simplified();		
+			return new Solid(a.AllPolygons());
 		}
 		
 		// Return a new CSG solid representing space in this solid but not in the solid csg. 
@@ -338,7 +338,7 @@ namespace CSG {
 			b.Invert();
 			a.Build(b.AllPolygons());
 			a.Invert();
-			return new Solid(a.AllPolygons().ToArray()).Simplified();
+			return new Solid(a.AllPolygons());
 		}
 		
 		// Return a new CSG solid representing space both this solid and in the solid csg. 
@@ -368,7 +368,7 @@ namespace CSG {
 			b.ClipTo(a);
 			a.Build(b.AllPolygons());
 			a.Invert();
-			return new Solid(a.AllPolygons().ToArray()).Simplified();
+			return new Solid(a.AllPolygons());
 		}
 		
 		// Return a new CSG solid with solid and empty space switched. 
