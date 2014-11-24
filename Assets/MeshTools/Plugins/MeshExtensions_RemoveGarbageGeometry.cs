@@ -302,7 +302,7 @@ public static partial class MeshExtensions {
 	
 	internal static bool IsColinear(this Vector3 p, Vector3 p0, Vector3 p1) 
 	{
-		const float EPSILON_SQ = 0.00333f * 0.00333f;
+		const float EPSILON_SQ = 0.001f * 0.001f;
 		var u = (p0 - p).normalized;
 		var v = (p1 - p).normalized;
 		return Vector3.Cross(u,v).sqrMagnitude < EPSILON_SQ;
