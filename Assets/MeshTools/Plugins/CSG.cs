@@ -194,7 +194,7 @@ namespace CSG {
 		
 		public Polygon Simplified()
 		{
-			const float EPSILON_SQ = 0.0025f * 0.0025f;
+			const float EPSILON_SQ = 0.001f * 0.001f;
 			var verts = new List<Vertex>(vertices.Count); 
 			verts.AddRange(vertices);
 			for(int i=0; verts.Count > 3 && i < verts.Count; ) {
@@ -213,7 +213,6 @@ namespace CSG {
 			}
 			
 			return new Polygon(verts) { shared = shared };
-
 		}
 	}
 	
@@ -577,7 +576,7 @@ namespace CSG {
 		const int FRONT = 1;
 		const int BACK = 2;
 		const int SPANNING = 3;
-		const float EPSILON = 0.001f;
+		const float EPSILON = 0.0001f;
 		static List<Vertex> frontBuf = new List<Vertex>();
 		static List<Vertex> backBuf = new List<Vertex>();
 

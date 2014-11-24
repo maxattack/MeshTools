@@ -16,7 +16,7 @@ public static class Toolbelt {
 		return result;
 	}
 	
-	static GameObject CreatePrimitive(string name) {
+	public static GameObject CreatePrimitive(string name) {
 		var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
 		go.GetFX().castShadows = false;
 		go.GetFX().receiveShadows = false;
@@ -44,12 +44,25 @@ public static class Toolbelt {
 		return go;
 	}
 	
+	[MenuItem("Toolbelt/Create Cube")]
 	public static GameObject CreateCube() { return CreateType(PrimitiveType.Cube); }
+	
+	[MenuItem("Toolbelt/Create Capsule")]
 	public static GameObject CreateCapsule() { return CreateType(PrimitiveType.Capsule); }
+	
+	[MenuItem("Toolbelt/Create Sphere")]
 	public static GameObject CreateSphere() { return CreateType(PrimitiveType.Sphere); }
+	
+	[MenuItem("Toolbelt/Create Cylinder")]
 	public static GameObject CreateCylinder() { return CreateType(PrimitiveType.Cylinder); } 
-	public static GameObject CreatePlane() { return CreateType(PrimitiveType.Quad); }
+	
+//	[MenuItem("Toolbelt/Create Plane")]
+//	public static GameObject CreatePlane() { return CreateType(PrimitiveType.Quad); }
+	
+	[MenuItem("Toolbelt/Create Diamond")]
 	public static GameObject CreateDiamond() { return Create("diamond"); }
+	
+	[MenuItem("Toolbelt/Create Pyramid")]
 	public static GameObject CreatePyramid() { return Create("pyramid"); }
 	
 }

@@ -37,18 +37,25 @@ public static class Doodles {
 		
 		var root = new GameObject().GetTransform();
 		
+		var head = Toolbelt.CreatePyramid();
+		head.GetTransform().Rotate(90f, 0f, 0f);
+		var mesh = head.GetFilter().FreezeTransformation();
+		
+		
 		for(int i=0; i<count; ++i) {
-			var arrow = Toolbelt.CreatePyramid();
-			var xform = arrow.GetTransform();
+			var arrow = Toolbelt.CreatePrimitive("chevron");
+			arrow.GetFilter().sharedMesh = mesh;
+			var xform = arrow.GetTransform();								
+										
 			xform.position = samples[i];
 			xform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
 			var u = i / (count-1f);
-			xform.rotation = 
-				Quaternion.LookRotation(curve.DerivAt(u).normalized) *
-				Quaternion.Euler(90f, 0f, 0f) ;
+			
+			xform.rotation = Quaternion.LookRotation(curve.DerivAt(u).normalized);
 			xform.parent = root;
 		}
 		
+		GameObject.DestroyImmediate(head);
 	}
 	
 	

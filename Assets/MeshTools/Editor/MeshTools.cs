@@ -31,26 +31,7 @@ using UnityEngine;
 
 public static class MeshTools {
 	
-	static bool GetTwoMeshFilters(out MeshFilter m1, out MeshFilter m2)
-	{
-		if (Selection.gameObjects.Length != 2) { 
-			m1 = null; m2 = null;
-			return false; 
-		}
-		
-		m1 = Selection.activeGameObject.GetComponent<MeshFilter>();
-		m2 = Selection.gameObjects[0] == Selection.activeGameObject ? 
-			Selection.gameObjects[1].GetComponent<MeshFilter>() : 
-			Selection.gameObjects[0].GetComponent<MeshFilter>() ;
-		
-		if (m1 == null || m2 == null) { 
-			m1 = null;
-			m2 = null;
-			return false; 
-		}
-		
-		return true;
-	}
+	// COMMANDS
 	
 	[MenuItem("MeshTools/Union _u")]
 	static void Union()
@@ -97,7 +78,7 @@ public static class MeshTools {
 	[MenuItem("CONTEXT/MeshFilter/Remove Garbage")]
 	static void Cleanup()
 	{
-		var mesh = Selection.activeGameObject.GetComponent<MeshFilter>().mesh;
+		var mesh = Selection.activeGameObject.GetComponent<MeshFilter>().sharedMesh;
 		mesh.RemoveGarbageGeometry();
 	}
 	
@@ -118,48 +99,28 @@ public static class MeshTools {
 			}
 		}
 	}
-
-	[MenuItem("MeshTools/Test CSG")]
-	static void TestCSG() {
-		var solids = Selection.gameObjects
-			.Select(go => go.GetComponent<MeshFilter>())
-			.Where(filter => filter != null)
-			.Select(filter => filter.CreateSolid())
-			.ToArray();
-		
-		if (solids.Length == 1) {
-			var filters = GameObject.FindObjectsOfType<MeshFilter>();
-			var subs = filters
-				.Where(filter => !Selection.gameObjects.Contains(filter.gameObject))
-				.Select(filter => filter.CreateSolid())
-				.ToArray();
-			
-			if (subs.Length == 1) {
-				solids[0].Subtract(subs[0]).CreateGameObject("Difference");
-				filters[0].gameObject.SetActive(false);
-			}
-				
-			
-		} else if (solids.Length == 2) {
-			
-			var intersection = solids[0].Intersect(solids[1]);
-			intersection.CreateGameObject("Intersection");
-			
-			
-		} else if (solids.Length > 2) {
-			
-			var accum = solids[0];
-			for(int i=1; i<solids.Length; ++i) {
-				accum = accum.Union(solids[i]);
-			}
-			accum.CreateGameObject("Union");
-			
-		}
-
-		foreach(var go in Selection.gameObjects) {
-			go.SetActive(false);
+	
+	// HELPERS
+	
+	static bool GetTwoMeshFilters(out MeshFilter m1, out MeshFilter m2)
+	{
+		if (Selection.gameObjects.Length != 2) { 
+			m1 = null; m2 = null;
+			return false; 
 		}
 		
+		m1 = Selection.activeGameObject.GetComponent<MeshFilter>();
+		m2 = Selection.gameObjects[0] == Selection.activeGameObject ? 
+			Selection.gameObjects[1].GetComponent<MeshFilter>() : 
+				Selection.gameObjects[0].GetComponent<MeshFilter>() ;
+		
+		if (m1 == null || m2 == null) { 
+			m1 = null;
+			m2 = null;
+			return false; 
+		}
+		
+		return true;
 	}
-
+	
 }
